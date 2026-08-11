@@ -42,31 +42,31 @@ final GoRouter _router = GoRouter(
             return const RegisterScreen();
           },
           routes:  <RouteBase>[
-            GoRoute(
-              path: 'home',
-              builder: (BuildContext context, GoRouterState state) {
-                return const HomeScreen();
-              },
-            ),
-            GoRoute(
-              path: 'ai_assistant',
-              builder: (BuildContext context, GoRouterState state) {
-                return const AiAssistant();
-              },
-            ),
-            GoRoute(
-              path: 'health_tracking',
-              builder: (BuildContext context, GoRouterState state) {
-                return const HealthTracking();
-              },
-            ),
-            GoRoute(
-              path: 'emergency_support',
-              builder: (BuildContext context, GoRouterState state) {
-                return const EmergencySupport();
-              },
-            ),
           ]
+        ),
+        GoRoute(
+          path: 'home',
+          builder: (BuildContext context, GoRouterState state) {
+            return const HomeScreen();
+          },
+        ),
+        GoRoute(
+          path: 'ai_assistant',
+          builder: (BuildContext context, GoRouterState state) {
+            return const AiAssistant();
+          },
+        ),
+        GoRoute(
+          path: 'health_tracking',
+          builder: (BuildContext context, GoRouterState state) {
+            return const HealthTracking();
+          },
+        ),
+        GoRoute(
+          path: 'emergency_support',
+          builder: (BuildContext context, GoRouterState state) {
+            return const EmergencySupport();
+          },
         ),
       ],
     ),
