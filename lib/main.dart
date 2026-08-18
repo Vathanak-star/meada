@@ -3,14 +3,21 @@ import 'package:go_router/go_router.dart';
 import 'package:meada_app/View/screen_feature/ai_assistant.dart';
 import 'package:meada_app/View/screen_feature/emergency_support.dart';
 import 'package:meada_app/View/screen_feature/health_tracking.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'View/home_screen.dart';
 import 'View/login_screen.dart';
 import 'View/register_screen.dart';
 import 'View/splash_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: '',
+    publishableKey: '',
+  );
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
