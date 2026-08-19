@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:meada_app/View/screen_feature/ai_assistant.dart';
 import 'package:meada_app/View/screen_feature/emergency_support.dart';
 import 'package:meada_app/View/screen_feature/health_tracking.dart';
+import 'package:meada_app/View/screen_feature/profile_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'View/home_screen.dart';
@@ -10,12 +11,11 @@ import 'View/login_screen.dart';
 import 'View/register_screen.dart';
 import 'View/splash_screen.dart';
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
-    url: '',
-    publishableKey: '',
+    url: 'https://ewnsjahorcpboldlidvh.supabase.co',
+    publishableKey: 'sb_publishable_IG_DIjEimx3Msw1qRrtCmQ_6XnheDZe',
   );
   runApp(MyApp());
 }
@@ -48,7 +48,7 @@ final GoRouter _router = GoRouter(
           builder: (BuildContext context, GoRouterState state) {
             return const RegisterScreen();
           },
-          routes:  <RouteBase>[
+          routes: <RouteBase>[
           ]
         ),
         GoRoute(
@@ -73,6 +73,12 @@ final GoRouter _router = GoRouter(
           path: 'emergency_support',
           builder: (BuildContext context, GoRouterState state) {
             return const EmergencySupport();
+          },
+        ),
+        GoRoute(
+          path: 'profile',
+          builder: (BuildContext context, GoRouterState state) {
+            return const ProfileScreen();
           },
         ),
       ],

@@ -74,7 +74,7 @@ class RegisterScreen extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     MaterialButton(
-                      onPressed: () => context.go('/home'),
+                      onPressed: () => context.go('home'),
                       padding: const EdgeInsets.all(0.0),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(80.0),
