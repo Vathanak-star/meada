@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 
 import 'feature_bottom_nav.dart';
 
-class EmergencySupport extends StatelessWidget {
-  const EmergencySupport({super.key});
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF7EFF1),
       appBar: AppBar(
-        title: const Text('Emergency Support'),
+        title: const Text('Profile'),
         backgroundColor: Colors.transparent,
         elevation: 0,
       ),
-      body: const Center(child: Text('Emergency support')),
-      bottomNavigationBar: const FeatureBottomNav(activeIndex: 3),
+      body: const Center(child: Text('Your profile')),
+      bottomNavigationBar: const FeatureBottomNav(activeIndex: 4),
     );
   }
 }
