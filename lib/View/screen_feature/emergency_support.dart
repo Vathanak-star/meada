@@ -10,6 +10,7 @@ class EmergencySupport extends StatelessWidget {
     return Scaffold(
       backgroundColor: const Color(0xFFF7EFF1),
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Emergency Support'),
         backgroundColor: Colors.transparent,
         elevation: 0,
