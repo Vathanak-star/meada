@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'feature_bottom_nav.dart';
 
@@ -11,14 +12,150 @@ class HealthTracking extends StatefulWidget {
 
 class _HealthTrackingState extends State<HealthTracking> {
   bool _showSymptoms = false;
-  int _waterCount = 6;
+  int _waterCount = 0;
   int _selectedMood = 2;
+  List<_LoggedSymptom> _symptoms = [];
+  List<int> _moodHistory = List.filled(7, 2);
+  bool _isLoading = true;
 
   static const _rose = Color(0xFFC46F7D);
   static const _ink = Color(0xFF1F1B1C);
   static const _surface = Color(0xFFFFFDFD);
   static const _background = Color(0xFFF7EFF1);
   static const _muted = Color(0xFF7E777A);
+
+  User? get _user => Supabase.instance.client.auth.currentUser;
+
+  String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  String _displayDate(String date) {
+    final parts = date.split('-');
+    return parts.length == 3 ? '${parts[2]}/${parts[1]}/${parts[0]}' : date;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHealthData();
+  }
+
+  Future<void> _loadHealthData() async {
+    final user = _user;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    try {
+      final dailyRows = await Supabase.instance.client
+          .from('daily_health_logs')
+          .select('log_date, water_count, mood')
+          .eq('user_id', user.id)
+          .order('log_date', ascending: false)
+          .limit(7);
+      final symptomRows = await Supabase.instance.client
+          .from('symptom_logs')
+          .select('id, name, severity, category, log_date')
+          .eq('user_id', user.id)
+          .order('log_date', ascending: false)
+          .order('created_at', ascending: false);
+      if (!mounted) return;
+      final daily = (dailyRows as List<dynamic>).cast<Map<String, dynamic>>();
+      final today = daily
+          .where((row) => row['log_date'] == _dateKey(DateTime.now()))
+          .firstOrNull;
+      setState(() {
+        _waterCount = (today?['water_count'] as int?) ?? 0;
+        _selectedMood = (today?['mood'] as int?) ?? 2;
+        _moodHistory = List.generate(7, (index) {
+          if (index >= daily.length) return 2;
+          return (daily[daily.length - 1 - index]['mood'] as int?) ?? 2;
+        });
+        _symptoms = (symptomRows as List<dynamic>).map((row) {
+          final data = row as Map<String, dynamic>;
+          return _LoggedSymptom(
+            id: data['id'] as int?,
+            name: data['name'] as String,
+            severity: data['severity'] as String,
+            category: data['category'] as String,
+            date: _displayDate(data['log_date'] as String),
+          );
+        }).toList();
+        _isLoading = false;
+      });
+    } on PostgrestException catch (error) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError('Health data could not be loaded: ${error.message}');
+      }
+    }
+  }
+
+  Future<void> _saveDailyData({int? waterCount, int? mood}) async {
+    final user = _user;
+    if (user == null) {
+      _showError('Please log in to save health data.');
+      return;
+    }
+    final nextWater = waterCount ?? _waterCount;
+    final nextMood = mood ?? _selectedMood;
+    setState(() {
+      _waterCount = nextWater;
+      _selectedMood = nextMood;
+      _moodHistory = [..._moodHistory.skip(1), nextMood];
+    });
+    try {
+      await Supabase.instance.client.from('daily_health_logs').upsert({
+        'user_id': user.id,
+        'log_date': _dateKey(DateTime.now()),
+        'water_count': nextWater,
+        'mood': nextMood,
+      }, onConflict: 'user_id,log_date');
+    } on PostgrestException catch (error) {
+      _showError('Health data was not saved: ${error.message}');
+    }
+  }
+
+  Future<void> _saveSymptom(_LoggedSymptom symptom) async {
+    final user = _user;
+    if (user == null) {
+      _showError('Please log in to save symptoms.');
+      return;
+    }
+    try {
+      await Supabase.instance.client.from('symptom_logs').insert({
+        'user_id': user.id,
+        'name': symptom.name,
+        'severity': symptom.severity,
+        'category': symptom.category,
+        'log_date': symptom.date,
+      });
+      if (mounted) {
+        setState(
+          () => _symptoms.insert(
+            0,
+            _LoggedSymptom(
+              name: symptom.name,
+              severity: symptom.severity,
+              category: symptom.category,
+              date: _displayDate(symptom.date),
+            ),
+          ),
+        );
+      }
+    } on PostgrestException catch (error) {
+      _showError('Symptom was not saved: ${error.message}');
+      rethrow;
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+      );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,40 +166,46 @@ class _HealthTrackingState extends State<HealthTracking> {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Center(child: _Title()),
-                  const SizedBox(height: 16),
-                  _SegmentedTabs(
-                    showSymptoms: _showSymptoms,
-                    onChanged: (value) => setState(() => _showSymptoms = value),
-                    rose: _rose,
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: _rose))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Center(child: _Title()),
+                        const SizedBox(height: 16),
+                        _SegmentedTabs(
+                          showSymptoms: _showSymptoms,
+                          onChanged: (value) =>
+                              setState(() => _showSymptoms = value),
+                          rose: _rose,
+                        ),
+                        const SizedBox(height: 22),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 220),
+                          child: _showSymptoms
+                              ? _SymptomsView(
+                                  key: const ValueKey('symptoms'),
+                                  rose: _rose,
+                                  logs: _symptoms,
+                                  onSave: _saveSymptom,
+                                )
+                              : _TodayView(
+                                  key: const ValueKey('today'),
+                                  rose: _rose,
+                                  waterCount: _waterCount,
+                                  selectedMood: _selectedMood,
+                                  onWaterTap: (index) =>
+                                      _saveDailyData(waterCount: index + 1),
+                                  onMoodChanged: (index) =>
+                                      _saveDailyData(mood: index),
+                                  moodHistory: _moodHistory,
+                                ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 22),
-                  AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 220),
-                    child: _showSymptoms
-                        ? _SymptomsView(
-                            key: const ValueKey('symptoms'),
-                            rose: _rose,
-                          )
-                        : _TodayView(
-                            key: const ValueKey('today'),
-                            rose: _rose,
-                            waterCount: _waterCount,
-                            selectedMood: _selectedMood,
-                            onWaterTap: (index) =>
-                                setState(() => _waterCount = index + 1),
-                            onMoodChanged: (index) =>
-                                setState(() => _selectedMood = index),
-                          ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
@@ -73,11 +216,13 @@ class _HealthTrackingState extends State<HealthTracking> {
 
 class _LoggedSymptom {
   const _LoggedSymptom({
+    this.id,
     required this.name,
     required this.severity,
     required this.category,
     required this.date,
   });
+  final int? id;
   final String name;
   final String severity;
   final String category;
@@ -170,12 +315,14 @@ class _TodayView extends StatelessWidget {
     required this.selectedMood,
     required this.onWaterTap,
     required this.onMoodChanged,
+    required this.moodHistory,
   });
   final Color rose;
   final int waterCount;
   final int selectedMood;
   final ValueChanged<int> onWaterTap;
   final ValueChanged<int> onMoodChanged;
+  final List<int> moodHistory;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -253,7 +400,9 @@ class _TodayView extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 20),
-      _Panel(child: _MoodHistory(rose: rose)),
+      _Panel(
+        child: _MoodHistory(rose: rose, values: moodHistory),
+      ),
     ],
   );
 }
@@ -370,11 +519,11 @@ class _Mood extends StatelessWidget {
 }
 
 class _MoodHistory extends StatelessWidget {
-  const _MoodHistory({required this.rose});
+  const _MoodHistory({required this.rose, required this.values});
   final Color rose;
+  final List<int> values;
   @override
   Widget build(BuildContext context) {
-    const values = [45.0, 68.0, 38.0, 91.0, 49.0, 69.0, 27.0];
     const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
     return Column(
@@ -415,7 +564,7 @@ class _MoodHistory extends StatelessWidget {
                               children: [
                                 Container(
                                   width: 20,
-                                  height: entry.value,
+                                  height: 22 + entry.value * 14.0,
                                   decoration: BoxDecoration(
                                     color: entry.key == 3
                                         ? const Color(0xFF9CC3A7)
@@ -448,8 +597,15 @@ class _MoodHistory extends StatelessWidget {
 }
 
 class _SymptomsView extends StatefulWidget {
-  const _SymptomsView({super.key, required this.rose});
+  const _SymptomsView({
+    super.key,
+    required this.rose,
+    required this.logs,
+    required this.onSave,
+  });
   final Color rose;
+  final List<_LoggedSymptom> logs;
+  final Future<void> Function(_LoggedSymptom) onSave;
 
   @override
   State<_SymptomsView> createState() => _SymptomsViewState();
@@ -457,50 +613,26 @@ class _SymptomsView extends StatefulWidget {
 
 class _SymptomsViewState extends State<_SymptomsView> {
   final _symptomController = TextEditingController();
-  final _dateController = TextEditingController();
+  final _filterDateController = TextEditingController();
   String _severity = 'Mild';
   String _category = 'Nausea';
-  final List<_LoggedSymptom> _logs = [
-    const _LoggedSymptom(
-      name: 'Mild nausea',
-      severity: 'Mild',
-      category: 'Nausea',
-      date: '16/08/2026',
-    ),
-    const _LoggedSymptom(
-      name: 'Lower back pain',
-      severity: 'Moderate',
-      category: 'Pain',
-      date: '16/08/2026',
-    ),
-    const _LoggedSymptom(
-      name: 'Heartburn after dinner',
-      severity: 'Mild',
-      category: 'Digestion',
-      date: '14/08/2026',
-    ),
-    const _LoggedSymptom(
-      name: 'Leg cramps during sleep',
-      severity: 'Moderate',
-      category: 'Cramps',
-      date: '13/08/2026',
-    ),
-    const _LoggedSymptom(
-      name: 'Shortness of breath',
-      severity: 'Mild',
-      category: 'Breathing',
-      date: '10/08/2026',
-    ),
-  ];
-
   @override
   void dispose() {
     _symptomController.dispose();
-    _dateController.dispose();
+    _filterDateController.dispose();
     super.dispose();
   }
 
-  void _saveLog() {
+  String _databaseDate(String displayDate) {
+    final parts = displayDate.split('/');
+    if (parts.length != 3) return _dateKey(DateTime.now());
+    return '${parts[2]}-${parts[1]}-${parts[0]}';
+  }
+
+  String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _saveLog() async {
     final name = _symptomController.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -508,20 +640,23 @@ class _SymptomsViewState extends State<_SymptomsView> {
       );
       return;
     }
-    setState(() {
-      _logs.insert(
-        0,
+    final now = DateTime.now();
+    final displayDate =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+    try {
+      await widget.onSave(
         _LoggedSymptom(
           name: name,
           severity: _severity,
           category: _category,
-          date: _dateController.text.trim().isEmpty
-              ? '19/08/2026'
-              : _dateController.text.trim(),
+          date: _databaseDate(displayDate),
         ),
       );
-      _symptomController.clear();
-    });
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _symptomController.clear());
     FocusScope.of(context).unfocus();
     ScaffoldMessenger.of(
       context,
@@ -531,7 +666,7 @@ class _SymptomsViewState extends State<_SymptomsView> {
   void _cancelForm() {
     setState(() {
       _symptomController.clear();
-      _dateController.clear();
+      _filterDateController.clear();
       _severity = 'Mild';
       _category = 'Nausea';
     });
@@ -665,7 +800,7 @@ class _SymptomsViewState extends State<_SymptomsView> {
       ),
       const SizedBox(height: 8),
       _RoundedField(
-        controller: _dateController,
+        controller: _filterDateController,
         hintText: 'mm/dd/yyyy',
         icon: Icons.calendar_today_outlined,
         readOnly: true,
@@ -676,19 +811,20 @@ class _SymptomsViewState extends State<_SymptomsView> {
             lastDate: DateTime(2030),
             initialDate: DateTime.now(),
           );
-          if (picked != null)
+          if (picked != null) {
             setState(
-              () => _dateController.text =
+              () => _filterDateController.text =
                   '${picked.day.toString().padLeft(2, '0')}/${picked.month.toString().padLeft(2, '0')}/${picked.year}',
             );
+          }
         },
       ),
       const SizedBox(height: 8),
-      ..._logs
+      ...widget.logs
           .where(
             (log) =>
-                _dateController.text.isEmpty ||
-                log.date == _dateController.text,
+                _filterDateController.text.isEmpty ||
+                log.date == _filterDateController.text,
           )
           .map((log) => _SymptomEntry(log: log, rose: widget.rose)),
     ],

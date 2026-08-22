@@ -37,6 +37,8 @@ dependencies:
   go_router:
   animated_text_kit:
   supabase_flutter:
+  http: ^1.6.0
+  flutter_dotenv: 
 
 dev_dependencies:
   flutter_test:
