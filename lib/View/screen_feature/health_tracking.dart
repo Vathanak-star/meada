@@ -67,10 +67,11 @@ class _HealthTrackingState extends State<HealthTracking> {
       setState(() {
         _waterCount = (today?['water_count'] as int?) ?? 0;
         _selectedMood = (today?['mood'] as int?) ?? 2;
-        _moodHistory = List.generate(7, (index) {
-          if (index >= daily.length) return 2;
-          return (daily[daily.length - 1 - index]['mood'] as int?) ?? 2;
-        });
+        _moodHistory = List.filled(7, 2);
+        for (final row in daily) {
+          final logDate = DateTime.parse(row['log_date'] as String);
+          _moodHistory[logDate.weekday - 1] = (row['mood'] as int?) ?? 2;
+        }
         _symptoms = (symptomRows as List<dynamic>).map((row) {
           final data = row as Map<String, dynamic>;
           return _LoggedSymptom(
@@ -99,10 +100,12 @@ class _HealthTrackingState extends State<HealthTracking> {
     }
     final nextWater = waterCount ?? _waterCount;
     final nextMood = mood ?? _selectedMood;
+    final updatedMoodHistory = List<int>.from(_moodHistory);
+    updatedMoodHistory[DateTime.now().weekday - 1] = nextMood;
     setState(() {
       _waterCount = nextWater;
       _selectedMood = nextMood;
-      _moodHistory = [..._moodHistory.skip(1), nextMood];
+      _moodHistory = updatedMoodHistory;
     });
     try {
       await Supabase.instance.client.from('daily_health_logs').upsert({
@@ -524,7 +527,7 @@ class _MoodHistory extends StatelessWidget {
   final List<int> values;
   @override
   Widget build(BuildContext context) {
-    const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,7 +569,7 @@ class _MoodHistory extends StatelessWidget {
                                   width: 20,
                                   height: 22 + entry.value * 14.0,
                                   decoration: BoxDecoration(
-                                    color: entry.key == 3
+                                    color: entry.value >= 3
                                         ? const Color(0xFF9CC3A7)
                                         : const Color(0xFFEBC7CD),
                                     borderRadius: const BorderRadius.vertical(
@@ -746,11 +749,6 @@ class _SymptomsViewState extends State<_SymptomsView> {
                         ),
                       )
                       .toList(),
-            ),
-            const SizedBox(height: 12),
-            _RoundedField(
-              controller: _symptomController,
-              hintText: 'Type a symptom...',
             ),
             const SizedBox(height: 12),
             Row(
